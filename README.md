@@ -31,3 +31,33 @@ An extension of self-attention that uses multiple attention heads to capture dif
 
 ---
 
+# Day 2: Hello World
+
+## Topics Covered
+### 🔹 GIGO (Garbage In, Garbage Out): 
+The quality of AI output depends entirely on the quality of your input.
+
+### 🔹 Prompting Technique: 
+The way you interact with AI determines how well it understands and responds.
+
+### 🔹 Prompting Styles:
+#### Alpaca Prompt: 
+    A simple instruction-based format used to guide the AI clearly.
+#### ChatML: 
+    A chat-style format using roles like system, user, and assistant for structured conversations.
+#### INST Format: 
+    A structured prompt format with labeled sections like Instruction, Input, and Response.
+
+### 🔹 System Prompting Techniques:
+#### Zero-Shot Prompting: 
+    Ask the AI a task directly without giving any examples.
+#### Few-Shot Prompting: 
+    Provide a few examples before asking the AI to generate a similar response.
+#### Chain-of-Thought (CoT) Prompting: 
+    Encourage the AI to explain its reasoning step-by-step.
+#### Self-Consistency Prompting:
+    Run multiple reasoning paths and choose the most consistent answer.
+#### Persona-Based Prompting: 
+    Guide the AI with a specific personality or role using few-shot examples.
+
+---
