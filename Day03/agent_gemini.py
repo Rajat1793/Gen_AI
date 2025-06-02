@@ -14,7 +14,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 logging.basicConfig(filename='command_execution.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 # Define a whitelist of safe commands
-SAFE_COMMANDS = ['pip install', 'npx create-react-app', 'ls', 'echo']
+SAFE_COMMANDS = ['pip install', 'npx create-react-app', 'ls', 'echo','npm start','npm start', 'cd', 'npm install','npm run build']
 
 def sanitize_command(command: str):
     for safe_command in SAFE_COMMANDS:
@@ -22,134 +22,221 @@ def sanitize_command(command: str):
             return True
     return False
 
-def run_command(command: str):
-    if not sanitize_command(command):
-        raise ValueError("Unsafe command detected!")
-    result = os.system(command)
-    return result
-
-# def create_react_app(project_name:str):
-#     result = subprocess.run(f"npx create-react-app {project_name} --yes", shell=True)
-#     logging.info(f"Output: {result.stdout}")
-#     if result.stderr:
-#         logging.error(f"Error: {result.stderr}")
-#     return result.stdout, result.stderr
-
-def create_react_app(project_name, use_bootstrap=False, style=None):
+def run_command(command):
     try:
-        result = subprocess.run(f"npx create-react-app {project_name} --yes", shell=True, capture_output=True, text=True)
-        logging.info(f"Output: {result.stdout}")
-        if result.stderr:
-            logging.error(f"Error: {result.stderr}")
-            return result.stdout, result.stderr
-
-        os.chdir(project_name)
-
-        if use_bootstrap:
-            result = subprocess.run("npm install bootstrap", shell=True, capture_output=True, text=True)
-            logging.info(f"Bootstrap install output: {result.stdout}")
-            if result.stderr:
-                logging.error(f"Bootstrap install error: {result.stderr}")
-                return result.stdout, result.stderr
-
-        if style == "scss":
-            result = subprocess.run("npm install node-sass", shell=True, capture_output=True, text=True)
-            logging.info(f"SCSS install output: {result.stdout}")
-            if result.stderr:
-                logging.error(f"SCSS install error: {result.stderr}")
-                return result.stdout, result.stderr
-
-        elif style == "tailwind":
-            subprocess.run("npm install -D tailwindcss", shell=True, capture_output=True, text=True)
-            subprocess.run("npx tailwindcss init", shell=True, capture_output=True, text=True)
-
-            with open("tailwind.config.js", "w") as f:
-                f.write("""module.exports = {
-  content: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}""")
-
-            with open("src/index.css", "w") as f:
-                f.write("""@tailwind base; @tailwind components; @tailwind utilities;""")
-
-        if use_bootstrap:
-            with open("src/index.js", "a") as f:
-                f.write("\nimport 'bootstrap/dist/css/bootstrap.min.css';")
-
-        return "React app created successfully with the specified options.", None
+        if not sanitize_command(command):
+            raise ValueError("Unsafe command detected!")
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        return result.stdout + result.stderr
     except Exception as e:
-        logging.error(f"Exception: {str(e)}")
-        return None, str(e)
+        return f"Command failed: {e}"
 
-            
-def get_weather(city: str):
-    url = f"https://wttr.in/{city}?format=%C+%t"
-    response = requests.get(url, verify=False)
+def create_folder(folder_name):
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+        return f"Folder '{folder_name}' created successfully."
+    else:
+        return f"Folder '{folder_name}' already exists."
 
-    if response.status_code == 200:
-        return f"The weather in {city} is {response.text}."
+def write_file(data):
+    try:
+        if isinstance(data, dict):
+            path = data.get("path")
+            content = data.get("content")
+            if not path or not content:
+                return "Invalid input: 'path' and 'content' are required."
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return f"File written: {path}"
+        else:
+            return "Input must be a dictionary with 'path' and 'content'."
+    except Exception as e:
+        return f"Error writing file: {e}"
     
-    return "Something went wrong"
+def run_server(command):
+    try:
+        subprocess.Popen(command, shell=True)
+        return f"Server started with: {command}"
+    except Exception as e:
+        return f"Error starting server: {e}"
 
 
 available_tools = {
-    "get_weather": get_weather,
     "run_command": run_command,
-    "create_react_app": create_react_app
+    "create_folder": create_folder,
+    "write_file": write_file,
+    "run_server": run_server,
 }
 
 SYSTEM_PROMPT = """
-You are an helpfull AI Assistant who is specialized in resolving user query.
-    You work on start, plan, action, observe mode.
+You are an AI developer assistant. When returning JSON that includes code (especially in the 'content' field), 
+ensure all strings are properly escaped. Use \\n for newlines and \\" for quotes inside strings. 
+Wrap the entire JSON block in triple backticks with 'json' for clarity.
 
-    For the given user query and available tools, plan the step by step execution, based on the planning,
-    select the relevant tool from the available tool. and based on the tool selection you perform an action to call the tool.
-
-    Wait for the observation and based on the observation from the tool call resolve the user query.
-
-    Rules:
-    - Follow the Output JSON Format.
-    - Always perform one step at a time and wait for next input
-    - Carefully analyse the user query
-
-    Output JSON Format:
-    {{
-        "step": "string",
-        "content": "string",
-        "function": "The name of function if the step is action",
-        "input": "The input parameter for the function",
-    }}
-
-    Available Tools:
-    - "get_weather": Takes a city name as an input and returns the current weather for the city
-    - "run_command": Takes linux command as a string and executes the command and returns the output after executing it.
-    - "create_react_app: Takes the project name as a string and ask the user with follow up question on styling and executes the command to create a react app and returns the output after executing it.
-
+---
+Objective:
+    Build or rewite the existing application based on the existing tools just by using the terminal. User can provide the context in multiple language like english, hindi or combination of both.
     Example:
-    User Query: What is the weather of new york?
-    Output: {{ "step": "plan", "content": "The user is interseted in weather data of new york" }}
-    Output: {{ "step": "plan", "content": "From the available tools I should call get_weather" }}
-    Output: {{ "step": "action", "function": "get_weather", "input": "new york" }}
-    Output: {{ "step": "observe", "output": "12 Degree Cel" }}
-    Output: {{ "step": "output", "content": "The weather for new york seems to be 12 degrees." }}
-    
-    Example:
-    User Query: Create a React app named 'myapp'.
-    Output: { "step": "plan", "content": "User wants to create a React app named 'myapp'" }
-    Output: { "step": "plan", "content": "I should ask the user about styling preferences" }
-    Output: { "step": "action", "function": "create_react_app", "input": "myapp" }
-    Output: { "step": "observe", "output": "React app 'myapp' is created. Do you want to add Bootstrap, SCSS, or Tailwind for styling?" }
-    Output: { "step": "output", "content": "React app 'myapp' is created. Do you want to add Bootstrap, SCSS, or Tailwind for styling?" }
+        - Create a todo app in React
+        - Create a full stack weather project
+        - Add login and logout functionality to TODO app
+
+Steps to be followed:
+    - Create folders/files
+    - Write logic code into the files and folder created
+    - Install all the dependencies using the run command
+    - Modify the existing code based on requirements
+    - Once done also start the sever for hosting
+    - Support follow up question from user 
+
+---
+
+Chain of Thought (COT):
+
+Follow the steps as described below and there should be just one follow up question from the user
+
+1. Think
+    - Think about the request
+    - Break the task into sub parts for easy and fast processing
+    - Point out how you will perform the task in points before processing
+
+2. Perform_task
+    - Use the tools listed to perform the task
+    - Provide the exact command to the tool as it will be check if command is safe to run or not
+
+3. Analyse
+    - Analyse all the previous steps taken 
+    - Make necessary changes if its required
+    - Apologies the user with message i'm still learning please apologize me if something goes wrong
+
+4. Repeat
+    - Keep repeating the steps untill task is completed
+
+5. Output
+    - Check if the app is successfully build or task is completed
+    - Summary of all steps taken
+    - Check if user has more requirements
+
+---
+
+Tools Available to perform the task
+
+Use the below tools in `Perform_task` step only:
+
+- `run_command(command: str)` -> Run terminal commands (eg: 'pip install', 'npx create-react-app', 'ls', 'echo')
+- `create_folder(path: str)` -> Create folders or directories
+- `write_file({ path: str, content: str })` -> Write code into files
+- `run_server(command: str)` -> Start dev servers (eg: 'npm start')
+
+---
+
+Changes to existing code:
+
+If a user asks to make changes to a specific part of a project:
+
+1. Use `run_command("ls")` to list files/directories.
+2. `cd` into the relevant folder.
+3. Read and understand the target files.
+4. Use `write_file` to update or add new files.
+5. Re-run the server to verify changes.
+
+---
+
+Output format:
+
+Always respond using **valid JSON** in this format:
+
+```json
+{
+  "step": "think" | "perform_task" | "analyse" | "repeat" | "Output",
+  "content": "appropriate reasons of what is been done",
+  "tool": "tool_name",          // only if any tool been used in perform_task step
+  "input": "tool input here"    // only if any tool been used in perform_task step
+}
+```
+---
+
+Eamples:
+ 
+User: Create a todo app in React
+agent: {
+  "step": "think",
+  "content": "To create a todo app in React, I need to set up a new React project, add a TodoList component, and run the dev server."
+}
+agent: {
+  "step": "perform_task",
+  "tool": "run_command",
+  "input": "npx create-react-app todo-app"
+}
+agent: {
+  "step": "analyse",
+  "content": "React app successfully."
+}
+agent:{
+  "step": "perform_task",
+  "tool": "run_command",
+  "input": "cd todo-app && npm install"
+}
+agent:{
+  "step": "perform_task",
+  "tool": "write_file",
+  "input": {
+    "path": "todo-app/src/TodoList.js",
+    "content": "import React from 'react';\n\nfunction TodoList() {\n  return <div>Todo List</div>;\n}\n\nexport default TodoList;"
+  }
+}
+agent:{
+  "step": "analyse",
+  "content": "Component created. Now adding it to App.js."
+}
+
+agent:{
+  "step": "perform_task",
+  "tool": "write_file",
+  "input": {
+    "path": "todo-app/src/App.js",
+    "content": "import React from 'react';\nimport TodoList from './TodoList';\n\nfunction App() {\n  return (\n    <div className=\"App\">\n      <h1>Todo App</h1>\n      <TodoList />\n    </div>\n  );\n}\n\nexport default App;"
+  }
+}
+
+agent:{
+  "step": "perform_task",
+  "tool": "run_server",
+  "input": "cd todo-app && npm start"
+}
+
+agent: {
+  "step": "output",
+  "content": "React todo app created and running at http://localhost:3000. Want to add more features?"
+}
+
+---
+
+Rules:
+Never skip any step and perform the task in order ("think" - "perform_task" - "analyse" - "repeat" - "Output")
+Use only one tool at a time
+Show all steps in planning with reasoning
+Before modify the code check if files and folder exist with ls and cd commands
+Respond only in valid JSON format—no extra comments or markdown.
+Dont assume structure; inspect it first unless creating from scratch.
+
+Summary
+Function as a highly capable agent who can:
+Start and build full projects
+Support iterative feature development
+Understand and modify codebases
+Keep servers running
 
 """
 
 # Initialize the model
 model = genai.GenerativeModel(
     model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_PROMPT
+    system_instruction=SYSTEM_PROMPT,
+    generation_config={
+        "temperature": 0.5 # You can adjust this value (0.0 to 1.0+)
+}
+
 )
 
 # Start conversation
@@ -159,8 +246,9 @@ chat.send_message(SYSTEM_PROMPT)
 
 exit_chat = False
 print("👋 Welcome to AI World, Type 'exit' to end the chat.\n")
+print("I can create any Full-Stack App, I'm still learning so might go wrong as well...")
 while not exit_chat:
-    query = input("> ")
+    query = input("\n User > ")
     if query.lower() == "exit":
         print("🤖: Goodbye!")
         exit_chat = True
@@ -172,47 +260,49 @@ while not exit_chat:
         response = chat.last.text
         try:
             raw_text = response.strip()
-            cleaned_text = raw_text.replace("```json", "").replace("```", "").strip()
 
-            # Split multiple JSON blocks if present
-            json_blocks = [block.strip() + "}" for block in cleaned_text.split("}") if block.strip()]
-            
-            for block in json_blocks:
-                try:
-                    parsed_response = json.loads(block)
-                except json.JSONDecodeError:
-                    print("❌ Invalid JSON block:", block)
-                    continue
+            # Try to parse the response as a single JSON object
+            parsed_response = json.loads(raw_text)
 
-                step = parsed_response.get("step")
+            step = parsed_response.get("step")
 
-                if step == "plan":
-                    print(f"🧠: {parsed_response.get('content')}")
-                    chat.send_message("acknowledged")
-                    continue
+            if step == "think":
+                print(f"🧠: {parsed_response.get('content')}")
+                chat.send_message("acknowledged")
 
-                if step == "action":
-                    tool_name = parsed_response.get("function")
-                    tool_input = parsed_response.get("input")
-                    print(f"🛠️: Calling Tool: {tool_name} with input {tool_input}")
+            elif step == "perform_task":
+                tool_name = parsed_response.get("tool")
+                tool_input = parsed_response.get("input")
+                print(f"🛠️: Calling Tool: {tool_name} with input {tool_input}")
 
-                    if tool_name in available_tools:
-                        tool_function = available_tools[tool_name]
-                        output = tool_function(**tool_input) if isinstance(tool_input, dict) else tool_function(tool_input)
-                        print(f"🔍 Tool Output: {output}")
-                        chat.send_message(json.dumps({ "step": "observe", "output": output }))
-                        continue
-                    else:
-                        print(f"❌ Unknown tool: {tool_name}")
-                        chat.send_message(json.dumps({ "step": "observe", "output": f"Tool '{tool_name}' is not available." }))
+                if tool_name in available_tools:
+                    tool_function = available_tools[tool_name]
+                    output = tool_function(**tool_input) if isinstance(tool_input, dict) else tool_function(tool_input)
+                    print(f"🔍 Tool Output: {output}")
+                    chat.send_message(json.dumps({ "step": "observe", "output": output }))
+                else:
+                    print(f"❌ Unknown tool: {tool_name}")
+                    chat.send_message(json.dumps({ "step": "observe", "output": f"Tool '{tool_name}' is not available." }))
+
+            elif step == "analyse":
+                print(f"👁️ Analysis: {parsed_response.get('content')}")
+
+            elif step == "output":
+                print(f"🤖 Output: {parsed_response.get('content')}")
+                while True:
+                    follow_up = input("🛠️ Do you want to make any more changes? (yes/no): ").strip().lower()
+                    if follow_up in ["no", "n", "i'm okay", "i am okay", "done", "finished", "exit"]:
+                        print("🎉 Project finalized. Exiting.")
+                        exit_chat = True
                         break
-
-                if step == "output":
-                    print(f"🤖: {parsed_response.get('content')}")
-                    break
-
-            break  # Exit after processing all blocks
-
+                    elif follow_up in ["yes", "y", "sure", "okay", "ok"]:
+                        print("🔁 Okay, what else would you like to modify or add?")
+                        next_change = input("📬 User > ").strip()
+                        chat.send_message(next_change)
+                        break
+                    else:
+                        print("❓ Please answer 'yes' or 'no'.")
+            else:
+                print(f"❓ Unknown step: {step}")
         except Exception as e:
             print("❌ Error processing response:", str(e))
-            break
