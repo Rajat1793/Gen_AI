@@ -1,15 +1,15 @@
-from google import generativeai as genai
-import os
 from dotenv import load_dotenv
+from datetime import datetime
+import google.generativeai as genai
+import json, os, re, subprocess
 import requests
-import json
-import subprocess
 
-# Load API key
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Define a whitelist of safe commands
+# Configure Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
 SAFE_COMMANDS = ['pip install', 'npx create-react-app', 'ls', 'echo','npm start','npm start', 'cd', 'npm install','npm run build']
 
 def sanitize_command(command: str):
@@ -55,7 +55,10 @@ def run_server(command):
         return f"Server started with: {command}"
     except Exception as e:
         return f"Error starting server: {e}"
-
+    
+def extract_json_objects(text):
+    json_objects = re.findall(r'\{.*?\}', text, re.DOTALL)
+    return [json.loads(obj) for obj in json_objects if obj.strip().startswith('{')]
 
 available_tools = {
     "run_command": run_command,
@@ -64,7 +67,9 @@ available_tools = {
     "run_server": run_server,
 }
 
+
 SYSTEM_PROMPT = """
+You are a helpful AI Assistant who is specialized in resolving user queries.
 You are an AI developer assistant. Your main task is to generate the code for any tool user has asked to create and in which programming language is been told to make it in
 You should always return the out of any step in pure json format
 
@@ -138,7 +143,6 @@ If a user asks to make changes to a specific part of a project:
 ---
 
 Output format:
-
 Strictly respond using **valid JSON** in below format no other format is accepted
 
 {
@@ -223,23 +227,9 @@ Keep servers running
 
 """
 
-# Initialize the model
-model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    system_instruction=SYSTEM_PROMPT,
-    generation_config={
-        "temperature": 0.5 # You can adjust this value (0.0 to 1.0+)
-    }
-)
-
-# Start conversation
-chat = model.start_chat()
-chat.send_message(SYSTEM_PROMPT)
-
+messages = [ { "role": "user", "parts": [SYSTEM_PROMPT] } ]
 
 exit_chat = False
-print("👋 Welcome to AI World, Type 'exit' to end the chat.\n")
-print("I can create any Full-Stack App, I'm still learning so might go wrong as well...")
 while not exit_chat:
     query = input("User > ")
     if query.lower() == "exit":
@@ -247,53 +237,51 @@ while not exit_chat:
         exit_chat = True
         break
     
-    chat.send_message(query)
-
     while True:
-        response = chat.last.text
-        try:
-            raw_text = response.strip()
-            cleaned_text = raw_text.replace("```json", "").replace("```", "").strip()
+        messages.append({ "role": "user", "parts": [query] })
 
-            # Split multiple JSON blocks if present
-            json_blocks = [block.strip() + "}" for block in cleaned_text.split("}") if block.strip()]
-            print(json_blocks)
-            for block in json_blocks:
-                try:
-                    parsed_response = json.loads(block)
-                except json.JSONDecodeError:
-                    print("❌ Invalid JSON block:", block)
-                    continue
+        while True:
+            response = model.generate_content(messages)
+            if not response.candidates or not response.candidates[0].content.parts:
+                print("⚠️ Gemini returned no content.")
+                continue
 
-                step = parsed_response.get("step")
+            content = response.candidates[0].content.parts[0].text
+            print('Printing the content before pasrsing: ',content)
+            try:
+                print("🔍 Trying to extract JSON...")
+                parsed_responses = extract_json_objects(content)
+                print("✅ Successfully parsed JSON.")
+            except Exception as e:
+                print("❌ Could not parse response as JSON.")
+                print("Error:", e)
+                break
 
-                if step == "plan":
+            for parsed_response in parsed_responses:
+                messages.append({ "role": "model", "parts": [json.dumps(parsed_response)] })
+
+                if parsed_response.get("step") == "think":
                     print(f"🧠: {parsed_response.get('content')}")
-                    chat.send_message("acknowledged")
                     continue
 
-                if step == "action":
-                    tool_name = parsed_response.get("function")
+                if parsed_response.get("step") == "perform_task":
+                    tool_name = parsed_response.get("tool")
                     tool_input = parsed_response.get("input")
+
                     print(f"🛠️: Calling Tool: {tool_name} with input {tool_input}")
 
+                    # if tool_name in available_tools:
+                    #     output = available_tools
+                    #     messages.append({ "role": "user", "parts": [json.dumps({ "step": "analyse", "output": str(output) })] })
+                    #     continue
                     if tool_name in available_tools:
                         tool_function = available_tools[tool_name]
                         output = tool_function(**tool_input) if isinstance(tool_input, dict) else tool_function(tool_input)
                         print(f"🔍 Tool Output: {output}")
-                        chat.send_message(json.dumps({ "step": "observe", "output": output }))
-                        continue
+                        messages.append({ "role": "user", "parts": [json.dumps({ "step": "observe", "output": str(output) })] })
                     else:
                         print(f"❌ Unknown tool: {tool_name}")
-                        chat.send_message(json.dumps({ "step": "observe", "output": f"Tool '{tool_name}' is not available." }))
-                        break
-
-                if step == "output":
+                        messages.append({ "role": "user", "parts": [json.dumps({ "step": "observe", "output": f"Tool '{tool_name}' is not available." })] })
+                if parsed_response.get("step") == "output":
                     print(f"🤖: {parsed_response.get('content')}")
                     break
-
-            break  # Exit after processing all blocks
-
-        except Exception as e:
-            print("❌ Error processing response:", str(e))
-            break
