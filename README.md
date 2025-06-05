@@ -61,3 +61,7 @@ The way you interact with AI determines how well it understands and responds.
     Guide the AI with a specific personality or role using few-shot examples.
 
 ---
+# Day 3: Agentic AI
+## Topics Covered
+#### 🔹 Agentic AI: 
+Its like creating an AI appliation on steroids which can help you create any appliaction and depoly it by using the local fucntion defined to perform specific tasks
