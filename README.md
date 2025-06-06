@@ -65,3 +65,20 @@ The way you interact with AI determines how well it understands and responds.
 ## Topics Covered
 #### 🔹 Agentic AI: 
 Its like creating an AI appliation on steroids which can help you create any appliaction and depoly it by using the local fucntion defined to perform specific tasks
+
+---
+
+# Day 4: Retrieval-Augmented Generation (RAG)
+
+This session focused on building intelligent systems that combine large language models with external knowledge sources to enhance response accuracy and relevance.
+
+## 🔍 Topics Covered
+
+- **Knowledge Source**: Understanding structured and unstructured data sources used to enrich model responses.
+- **Chunking**: Techniques to split large documents into manageable, semantically meaningful pieces.
+- **Vector Embedding**: Converting text chunks into numerical vectors using embedding models for semantic search.
+- **Vector DB**: Storing and querying embeddings efficiently using vector databases like FAISS or Pinecone.
+- **User Query**: Capturing and processing user input to retrieve relevant context.
+- **Retrieval**: Matching user queries with stored vectors to fetch the most relevant information for generation.
+
+> This foundation enables building smarter, context-aware AI applications that go beyond static knowledge.
