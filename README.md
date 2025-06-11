@@ -82,3 +82,7 @@ This session focused on building intelligent systems that combine large language
 - **Retrieval**: Matching user queries with stored vectors to fetch the most relevant information for generation.
 
 > This foundation enables building smarter, context-aware AI applications that go beyond static knowledge.
+
+# Day 5: Retrieval-Augmented Generation (RAG) with queuing system
+
+# Day 6: LangGraph
