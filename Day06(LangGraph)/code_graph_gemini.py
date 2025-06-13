@@ -139,7 +139,11 @@ def main():
         "accuracy_percentage": None,
         "is_coding_question": None,
     }
-    graph_result = graph.invoke(_state)
-    print("Graph_Result: ", graph_result)
+    # graph_result = graph.invoke(_state)
+    # print("Graph_Result: ", graph_result)
 
+    # graph stream
+    for event in graph.stream(_state):
+        print("Event: ", event)
+    
 main()
