@@ -131,3 +131,7 @@ Streaming enables real-time output from the language model, allowing users to re
 Monitoring tools track the performance and health of LangGraph workflows. They provide visibility into execution metrics, errors, and system status, supporting maintenance and optimization.
 
 ---
+
+# Day 8: Human In Loop
+
+# Day 9: Memory
